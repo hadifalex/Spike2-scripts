@@ -1,0 +1,57 @@
+' A.Alampounti - 12.04.2020
+' This script will run through a directory looking for all .srf files and then will attempt to convert them into .txt files. 
+' I am certain it could be re-written a lot better by someone more experience in Spike2 scripting, so its also highly encouraged to do so if you want!
+
+
+''' Begin by setting the variables
+'------------------------------------------
+var path$;             ' path to the file directory
+var filenames$[500];   ' the array with the list of files
+var fname$;            ' the name of the current file
+var ext$;              ' the file extension
+var type%;             ' txt file identifier
+var numFiles%;         ' number of files in the folder
+var countFiles%;       ' just an iterator
+var open%;             ' check for success
+
+''' Select the directory to look into.
+'------------------------------------------
+FilePathSet("");                  'Select directory - Leaving the path blank "" will prompt a dialogue. Select the folder with your data
+path$:=FilePath$();               'Select direcory to find files
+FilePathSet(path$);               'Set the path as the directory                         
+numFiles% :=FileList(filenames$[],4); 'Find the number of files involved.
+PrintLog("number of files is ",numFiles%);
+
+
+' Each srf file in the folder perform the following
+' 1. Open the file
+' 2. Change draw mode to line-mode w/o error bars
+' 3. Extract the name of the file
+' 4. Save the file as .txt and close your view.
+' 5. Diagnostics/End of ifs, for-loops etc..
+'-----------------------------------------------------------
+
+if numFiles% >0 then
+    ext$:=".txt";    ' desired output file extension
+    type%:=1;        ' relevant value for text files for the FileSaveAs function
+    
+    for countFiles% :=0 to numFiles%-1 do
+        
+        open% := FileOpen(path$+filenames$[countFiles%],4,3);
+        if open% then
+            ' Set the drawmode to remove the errorsbars and move to a histogram style.
+            ' This is important as Spike2 saves different parameters depending on the type of DrawMode.
+            
+            DrawMode(1,2,0,0);     ' 1st channel, 2: line mode, 0: smallest point size, 0: no error bars
+            fname$:= FileName$(3); ' set the name of the file
+
+            FileSaveAs(path$+fname$+ext$,type%);
+            FileClose(0,-1);
+            
+            PrintLog(FilePath$()+fname$+ext$+"---- Saved!");
+            PrintLog("\n");
+        else
+            Message("Failed to open file")
+        endif;
+    next;
+endif;

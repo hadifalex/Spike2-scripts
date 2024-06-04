@@ -1,0 +1,100 @@
+' A.Alampounti - 23.04.2021
+' This script will accept a single .smrx file and split it into smaller files based on Marker position. 
+' Each file produced will have a naming convention based on its respective marker name.
+
+''' Select a channel to export - check the script "alex UI for Splitter" for more details
+'--------------------------------
+var ok%,availChannels%[4]:={1,2,3,5},sRate%[4]:= {100000, 20000, 100000,10000};
+var chanSelected%,chanPosition%,item2%,item3%,item4:=0,item5:=1.1,gp%,item6%,item9%;
+var xo:=0,tstart:=0,tend:=MaxTime(),tmax:=MaxTime();
+
+DlgCreate("File Export Settings");
+DlgList (1,"Select a Channel","1 - Laser|2 - Nerve|3 - Stimulus|5 - Signal");
+DlgLabel(2,"Select the segment size assuming a start at a time marker. Range from -10 to +10 seconds.");
+DlgLabel(3,"Default settings (A=0, B=1.1)");
+DlgReal (4,"From t0 + A:",-10,10);
+DlgReal (5,"To     t0 + B:",-10,10);
+DlgCheck(6,"Check to specify the time domain [seconds]",xo,6);
+DlgAllow(0x3ff,0,Change%);
+gp%:=DlgGroup("By default, the script runs through the entire file.",1,7,-7,2);
+DlgReal (7,"From t0 + A:",0,tmax,-40,8);
+DlgReal (8,"From t_start to t_end",0,tmax,-25,8);
+DlgLabel(9,"You will be prompted to select the folder where the files will be exported.");
+ok% :=DlgShow(chanPosition%,item2%,item3%,item4,item5,item6%,tstart,tend,item9%);
+chanSelected%:=availChannels%[chanPosition%];
+
+Func Change%(item%) 
+var v%; 
+docase 
+    case ((item% = 6) or (item% = 0)) then '0 is initial setup 
+    v% := DlgValue(6);'get check box state 
+    DlgEnable(v%, gp%, 7, 8); 'enable groupbox+items 4, 5
+endcase; 
+return 1;'Return 1 to keep dialog running
+end;
+
+chanSelected%:=availChannels%[chanPosition%];
+PrintLog("\n");
+PrintLog("Channel Selected: ",chanSelected%);
+PrintLog("t start is: ",tstart);
+PrintLog("t end is: ",tend);
+'The following is useful if you do not want to initialise item4 and item5, corresponding to the offsets A and B respectively.
+'if item4=0 && item5=0 then
+ '   item4:=0;item5 := 1.1;
+'endif
+
+''' Select the directory to save data.
+'------------------------------------------
+var path$;           ' path to the file directory
+FilePathSet("");     ' Select directory - Leaving the path blank "" will prompt a dialogue. Select the folder with your data
+path$:=FilePath$();  ' Select direcory to find files
+FilePathSet(path$);  ' Set the path as the directory 
+
+''' Check that Ch.32 is a marker channel
+'---------------------------------------
+PrintLog("Is this a marker Channel? ",5=ChanKind(32)) ' Output of 5 means marker, so it should give True (1) instead of False(0)
+
+''' Extracting data
+'--------------------------------------------------------------------------------------
+' A caveat of this type of files is that different channels have different samplerates.
+' These are denoted in the variables further below as sRateN, N = 1,2,...
+
+' 1. Start at time = -1 (earliest possible) and find the first trigger Marker.
+' 2. Set the Export Format
+' 3. Reset the Channel List to export (in case a previous iteration has occurred)
+' 4. Select data between "time" and "time + X", where X the desired length
+' 5. Export the data with a given name and increment "time". 
+
+' Typically you want to set the while loop to:
+' while time >= 0 do
+' but you can place whatever limitation you want. Once the NextTime() reaches the end
+' the value it returns is "-1" meaning that the while loop condition is no longer satisfied.
+' If you however requested a value of i.e. time <= 20, but the last marker is at 15, then
+' you risk having an infitely repeating loop which will fill your HDD. A simple break clause
+' fixes this issue. 
+
+' Ch1: laser,   Ch2: Nerve signal,   Ch3: stimulus,  Ch5: 'signal'
+
+var time := tstart-1;  ' -1 ensures that all markers are captured.
+var mCodes%[1]; ' array to hold marker codes
+var countMarkers% := 0;
+var chanNames$[4]:={"laser","nerve","stim","signal"};
+
+
+time := NextTime(32,time,mCodes%); '#1 channel to look, #2 start looking after time, #3 marker Code, #4 relevant for TextMark
+while tstart<= time and time <=tend do
+    countMarkers% += 1;
+    PrintLog(time," with code value ",mCodes%, " with character ",Chr$(mCodes%[0]));
+    ExportRectFormat(sRate%[chanPosition%],0,"\"","	", 1);
+    ExportChanList(0);
+    'ExportChanList(time, time + 1, 1,2,3,5); ' this is the ideal case, but it won't work easily given different samplerates
+    ExportChanList(time+item4, time + item5,chanSelected%); ' just the laser data   
+    var ok2% := FileSaveAs(chanNames$[chanPosition%]+"_"+Chr$(mCodes%[0])+"_"+Str$(countMarkers%)+".txt", 1);
+    time := NextTime(32,time,mCodes%); '#1 channel to look, #2 start looking after time, #3 marker Code, #4 relevant for TextMark
+    
+    'to avoid infinite loops in case you want a time specifier (time <= X), we add a break clause
+    if time <= 0 then
+        break
+    endif
+    wend;
+PrintLog("\n")
